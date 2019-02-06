@@ -172,7 +172,7 @@ class MyHTMLParser(HTMLParser):
                 return
             if self.hasBlockedExtension(url) or self.redirects.count(url) > 0:
                 return
-            if self.robotParser is not None and not self.robotParser.allowed(url, "*"):
+            if self.robotParser is not None and not self.robotParser.allowed(url, "sitemap_gen"):
                 print("URL restricted by ROBOTS.TXT: " + url)
                 return
             # It's OK to add url to the map and fetch it later
