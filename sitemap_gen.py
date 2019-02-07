@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 """
     Copyright (C) 2007-2009 Vladimir Toncar
-    Copyright (C) 2018 Bernhard Ehlers
+    Copyright (C) 2018-2019 Bernhard Ehlers
 
     Contributors:
         Redirect handling by Pavel "ShadoW" Dvorak
@@ -29,7 +29,7 @@ import xml.sax.saxutils
 from reppy.robots import Robots
 
 
-helpText = """sitemap_gen.py version 1.2.1 (2018-07-10)
+helpText = """sitemap_gen.py version 1.2.2 (2019-02-07)
 
 This script crawls a web site from a given starting URL and generates
 a Sitemap file in the format that is accepted by Google. The crawler
