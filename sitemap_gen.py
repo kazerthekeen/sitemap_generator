@@ -20,6 +20,7 @@
 
 import sys
 import getopt
+import gzip
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,7 +30,7 @@ import xml.sax.saxutils
 from reppy.robots import Robots
 
 
-helpText = """sitemap_gen.py version 1.2.2 (2019-02-07)
+helpText = """sitemap_gen.py version 1.2.3 (2019-02-12)
 
 This script crawls a web site from a given starting URL and generates
 a Sitemap file in the format that is accepted by Google. The crawler
@@ -83,6 +84,10 @@ def getPage(url):
     try:
         f = urllib.request.urlopen(url)
         page = f.read()
+        if 'Content-Encoding' in f.headers and \
+           f.headers['Content-Encoding'] == 'gzip':
+            page = gzip.decompress(page)
+
         # Get the last modify date
         try:
             if 'Last-Modified' in f.headers:
@@ -297,7 +302,8 @@ def main():
 
     # Set user agent string
     opener = urllib.request.build_opener()
-    opener.addheaders = [('User-agent', 'sitemap_gen/1.0')]
+    opener.addheaders = [('User-agent', 'sitemap_gen/1.0'),
+                         ('Accept', '*/*'), ('Accept-Encoding', 'gzip')]
     urllib.request.install_opener(opener)
 
     # Start processing
