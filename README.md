@@ -52,6 +52,10 @@ Available options:
                                  value that you can set is 50000 (the script
                                  generates only a single sitemap file).
 
+-r <value> --ratelimit <value>   Set a crawl rate limit [requests / second],
+                                 zero (the default) results in no crawl rate
+                                 limitation.
+
 -o <file>  --output-file <file>  Set the name of the geneated sitemap file.
                                  The default file name is sitemap.xml.
 ```

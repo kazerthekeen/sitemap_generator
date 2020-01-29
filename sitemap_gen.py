@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 """
     Copyright (C) 2007-2009 Vladimir Toncar
-    Copyright (C) 2018-2019 Bernhard Ehlers
+    Copyright (C) 2018-2020 Bernhard Ehlers
 
     Contributors:
         Redirect handling by Pavel "ShadoW" Dvorak
@@ -21,6 +21,7 @@
 import sys
 import getopt
 import gzip
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,7 +31,7 @@ import xml.sax.saxutils
 from reppy.robots import Robots
 
 
-helpText = """sitemap_gen.py version 1.2.3 (2019-02-12)
+helpText = """sitemap_gen.py version 1.2.4 (2020-01-29)
 
 This script crawls a web site from a given starting URL and generates
 a Sitemap file in the format that is accepted by Google. The crawler
@@ -67,6 +68,10 @@ Available options:
                                  value that you can set is 50000 (the script
                                  generates only a single sitemap file).
 
+-r <value> --ratelimit <value>   Set a crawl rate limit [requests / second],
+                                 zero (the default) results in no crawl rate
+                                 limitation.
+
 -o <file>  --output-file <file>  Set the name of the geneated sitemap file.
                                  The default file name is sitemap.xml.
 
@@ -80,7 +85,9 @@ For more information, visit http://toncar.cz/opensource/sitemap_gen.html
 allowedChangefreq = ["always", "hourly", "daily", "weekly", \
                      "monthly", "yearly", "never"]
 
-def getPage(url):
+def getPage(url, ratelimitSleep=None):
+    if ratelimitSleep:
+        time.sleep(ratelimitSleep)
     try:
         f = urllib.request.urlopen(url)
         page = f.read()
@@ -194,7 +201,7 @@ def getUrlToProcess(pageMap):
             return i
     return None
 
-def parsePages(startUrl, maxUrls, blockExtensions):
+def parsePages(startUrl, maxUrls, blockExtensions, ratelimitSleep):
     pageMap = {}
     pageMap[startUrl] = ()
     redirects = []
@@ -206,7 +213,7 @@ def parsePages(startUrl, maxUrls, blockExtensions):
         if url is None:
             break
         print("  " + url)
-        page, date, newUrl = getPage(url)
+        page, date, newUrl = getPage(url, ratelimitSleep)
         if page is None:
             del pageMap[url]
         elif url != newUrl:
@@ -251,9 +258,9 @@ def generateSitemapFile(pageMap, fileName, changefreq="", priority=0.0):
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:],\
-                "hb:c:m:p:o:", \
-                ["help", "block=", "changefreq=", \
-                 "max-urls=", "priority=", "output-file="])
+                "hb:c:m:p:r:o:", \
+                ["help", "block=", "changefreq=", "max-urls=", \
+                 "priority=", "ratelimit=", "output-file="])
     except getopt.GetoptError:
         sys.stderr.write(helpText)
         return 1
@@ -264,6 +271,7 @@ def main():
     fileName = "sitemap.xml"
     maxUrls = 1000
     pageMap = {}
+    ratelimitSleep = None
 
     for opt, arg in opts:
         if opt in ("-h", "--help"):
@@ -289,6 +297,11 @@ def main():
             if (priority < 0.0) or (priority > 1.0):
                 sys.stderr.write("Priority must be between 0.0 and 1.0\n")
                 return 1
+        elif opt in ("-r", "--ratelimit"):
+            if float(arg) <= 0.0:
+                ratelimitSleep = None
+            else:
+                ratelimitSleep = 1.0 / float(arg)
         elif opt in ("-o", "--output-file"):
             fileName = arg
             if fileName in ("", ".", ".."):
@@ -308,7 +321,7 @@ def main():
 
     # Start processing
     print("Crawling the site...")
-    pageMap = parsePages(args[0], maxUrls, blockExtensions)
+    pageMap = parsePages(args[0], maxUrls, blockExtensions, ratelimitSleep)
     print("Generating sitemap: %d URLs" % (len(pageMap)))
     generateSitemapFile(pageMap, fileName, changefreq, priority)
     print("Finished.")
