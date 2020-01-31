@@ -85,9 +85,29 @@ For more information, visit http://toncar.cz/opensource/sitemap_gen.html
 allowedChangefreq = ["always", "hourly", "daily", "weekly", \
                      "monthly", "yearly", "never"]
 
-def getPage(url, ratelimitSleep=None):
-    if ratelimitSleep:
-        time.sleep(ratelimitSleep)
+class RateLimit:
+    """ rate limit requests """
+
+    def __init__(self, rate):
+        if rate <= 0.0:
+            self.interval_ns = None
+        else:
+            self.interval_ns = round(1e9 / rate)
+            self.req_time_ns = time.monotonic_ns()
+
+    def sleep(self):
+        if self.interval_ns:
+            self.req_time_ns += self.interval_ns
+            cur_time_ns = time.monotonic_ns()
+            sleep_time = (self.req_time_ns - cur_time_ns) / 1e9
+            if sleep_time > 0.0:
+                time.sleep(sleep_time)
+            else:
+                self.req_time_ns = cur_time_ns
+
+def getPage(url, ratelimit=None):
+    if ratelimit:
+        ratelimit.sleep()
     try:
         f = urllib.request.urlopen(url)
         page = f.read()
@@ -201,7 +221,7 @@ def getUrlToProcess(pageMap):
             return i
     return None
 
-def parsePages(startUrl, maxUrls, blockExtensions, ratelimitSleep):
+def parsePages(startUrl, maxUrls, blockExtensions, ratelimit):
     pageMap = {}
     pageMap[startUrl] = ()
     redirects = []
@@ -213,7 +233,7 @@ def parsePages(startUrl, maxUrls, blockExtensions, ratelimitSleep):
         if url is None:
             break
         print("  " + url)
-        page, date, newUrl = getPage(url, ratelimitSleep)
+        page, date, newUrl = getPage(url, ratelimit)
         if page is None:
             del pageMap[url]
         elif url != newUrl:
@@ -271,7 +291,7 @@ def main():
     fileName = "sitemap.xml"
     maxUrls = 1000
     pageMap = {}
-    ratelimitSleep = None
+    ratelimit = None
 
     for opt, arg in opts:
         if opt in ("-h", "--help"):
@@ -299,9 +319,9 @@ def main():
                 return 1
         elif opt in ("-r", "--ratelimit"):
             if float(arg) <= 0.0:
-                ratelimitSleep = None
+                ratelimit = None
             else:
-                ratelimitSleep = 1.0 / float(arg)
+                ratelimit = RateLimit(float(arg))
         elif opt in ("-o", "--output-file"):
             fileName = arg
             if fileName in ("", ".", ".."):
@@ -321,7 +341,7 @@ def main():
 
     # Start processing
     print("Crawling the site...")
-    pageMap = parsePages(args[0], maxUrls, blockExtensions, ratelimitSleep)
+    pageMap = parsePages(args[0], maxUrls, blockExtensions, ratelimit)
     print("Generating sitemap: %d URLs" % (len(pageMap)))
     generateSitemapFile(pageMap, fileName, changefreq, priority)
     print("Finished.")
