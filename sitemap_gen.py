@@ -20,18 +20,17 @@
 
 import sys
 import getopt
-import gzip
+import string
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
+import xml.sax.saxutils
 from datetime import datetime
 from html.parser import HTMLParser
-import xml.sax.saxutils
+import requests
 from reppy.robots import Robots
 
 
-helpText = """sitemap_gen.py version 1.2.4 (2020-01-29)
+helpText = """sitemap_gen.py version 1.2.5 (2020-03-14)
 
 This script crawls a web site from a given starting URL and generates
 a Sitemap file in the format that is accepted by Google. The crawler
@@ -93,7 +92,7 @@ class RateLimit:
             self.interval_ns = None
         else:
             self.interval_ns = round(1e9 / rate)
-            self.req_time_ns = time.monotonic_ns()
+            self.req_time_ns = time.monotonic_ns() - self.interval_ns
 
     def sleep(self):
         if self.interval_ns:
@@ -105,32 +104,71 @@ class RateLimit:
             else:
                 self.req_time_ns = cur_time_ns
 
-def getPage(url, ratelimit=None):
-    if ratelimit:
-        ratelimit.sleep()
-    try:
-        f = urllib.request.urlopen(url)
-        page = f.read()
-        if 'Content-Encoding' in f.headers and \
-           f.headers['Content-Encoding'] == 'gzip':
-            page = gzip.decompress(page)
+class HTMLLoad:
+    """ load http(s) page """
 
-        # Get the last modify date
+    def __init__(self, ratelimit=None):
+        self.session = requests.Session()
+        self.session.headers.update({'User-Agent': 'sitemap_gen/1.0'})
+        if not ratelimit:
+            ratelimit = 0.0
+        self.ratelimit = RateLimit(ratelimit)
+        self.page = None
+        self.status = 0
+        self.date = None
+        self.redirect = None
+
+    def _handle_redirect(self, resp):
+        # taken from urllib.request source code
+        newurl = resp.headers.get("location")
+        if not newurl:
+            raise requests.exceptions.HTTPError(
+                "%s No new location in redirection for url: %s" %
+                (resp.status_code, resp.url))
+        urlparts = urllib.parse.urlparse(newurl)
+        if urlparts.scheme not in ('http', 'https', 'ftp', ''):
+            raise requests.exceptions.HTTPError(
+                "%s Redirection to '%s' not allowed for url: %s" %
+                (resp.status_code, newurl, resp.url))
+        if not urlparts.path and urlparts.netloc:
+            urlparts = urlparts._replace(path='/')
+        newurl = urllib.parse.urlunparse(urlparts)
+        # http.client.parse_headers() decodes as ISO-8859-1. Recover the
+        # original bytes and percent-encode non-ASCII bytes, and any special
+        # characters such as the space.
+        newurl = urllib.parse.quote(newurl, encoding="iso-8859-1",
+                                    safe=string.punctuation)
+        self.redirect = urllib.parse.urljoin(resp.url, newurl)
+
+    def get(self, url, allow_redirects=False):
+        self.page = None
+        self.status = 0
+        self.date = datetime.now()
+        self.redirect = None
+
+        self.ratelimit.sleep()
         try:
-            if 'Last-Modified' in f.headers:
-                date = f.headers['Last-Modified']
+            resp = self.session.get(url, timeout=10,
+                                    allow_redirects=allow_redirects)
+            self.status = resp.status_code
+            if resp.status_code in (301, 302, 303, 307):
+                self._handle_redirect(resp)
             else:
-                date = f.headers['Date']
-            date = datetime.strptime(date, '%a, %d %b %Y %H:%M:%S %Z')
-            date = (date.year, date.month, date.day)
-        except (KeyError, ValueError):
-            date = (0, 0, 0)
-        f.close()
-        return (page, date, f.url)
-    except urllib.error.URLError as detail:
-        print("%s. Skipping..." % (detail))
-        return (None, (0, 0, 0), "")
-#end def
+                resp.raise_for_status()
+            self.page = resp.content
+            date = resp.headers.get('last-modified') or resp.headers.get('date')
+            try:
+                if date:
+                    self.date = datetime.strptime(date,
+                                                  '%a, %d %b %Y %H:%M:%S %Z')
+            except ValueError:
+                pass
+
+        except requests.exceptions.RequestException as detail:
+            print("%s. Skipping..." % (detail))
+
+        return self.page
+#end class
 
 
 def joinUrls(baseUrl, newUrl):
@@ -139,9 +177,9 @@ def joinUrls(baseUrl, newUrl):
 #end def
 
 
-def getRobotParser(startUrl):
+def getRobotParser(loader, startUrl):
     robotUrl = urllib.parse.urljoin(startUrl, "/robots.txt")
-    page, _, _ = getPage(robotUrl)
+    page = loader.get(robotUrl, allow_redirects=True)
 
     if page is None:
         print("Could not read ROBOTS.TXT at: " + robotUrl)
@@ -153,6 +191,7 @@ def getRobotParser(startUrl):
     return rp
 #end def
 
+EMPTY = []
 
 class MyHTMLParser(HTMLParser):
 
@@ -209,7 +248,7 @@ class MyHTMLParser(HTMLParser):
                 return
             # It's OK to add url to the map and fetch it later
             if not url in self.pageMap:
-                self.pageMap[url] = ()
+                self.pageMap[url] = EMPTY
         #end if
 
     #end def
@@ -217,32 +256,38 @@ class MyHTMLParser(HTMLParser):
 
 def getUrlToProcess(pageMap):
     for i in pageMap.keys():
-        if pageMap[i] == ():
+        if pageMap[i] is EMPTY:
             return i
     return None
 
-def parsePages(startUrl, maxUrls, blockExtensions, ratelimit):
+def parsePages(loader, startUrl, maxUrls, blockExtensions):
     pageMap = {}
-    pageMap[startUrl] = ()
+    pageMap[startUrl] = EMPTY
     redirects = []
 
-    robotParser = getRobotParser(startUrl)
+    robotParser = getRobotParser(loader, startUrl)
+    server = urllib.parse.urlsplit(startUrl)[1]
 
     while True:
         url = getUrlToProcess(pageMap)
         if url is None:
             break
         print("  " + url)
-        page, date, newUrl = getPage(url, ratelimit)
+        page = loader.get(url)
         if page is None:
             del pageMap[url]
-        elif url != newUrl:
+        elif loader.redirect:
+            newUrl, _ = urllib.parse.urldefrag(loader.redirect)
             print("Redirect -> " + newUrl)
             del pageMap[url]
-            pageMap[newUrl] = ()
             redirects.append(url)
+            if urllib.parse.urlsplit(newUrl)[1] == server and \
+               newUrl not in pageMap and newUrl not in redirects and \
+               (robotParser is None or \
+                robotParser.allowed(newUrl, "sitemap_gen")):
+                pageMap[newUrl] = EMPTY
         else:
-            pageMap[url] = date
+            pageMap[url] = loader.date
             parser = MyHTMLParser(pageMap, redirects, url, maxUrls, blockExtensions, robotParser)
             try:
                 parser.feed(page.decode("utf-8", errors='strict'))
@@ -261,8 +306,9 @@ def generateSitemapFile(pageMap, fileName, changefreq="", priority=0.0):
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n''')
     for i in sorted(pageMap.keys()):
         fw.write('<url>\n  <loc>%s</loc>\n' % (xml.sax.saxutils.escape(i)))
-        if pageMap[i] not in [(), (0, 0, 0)]:
-            fw.write('  <lastmod>%4d-%02d-%02d</lastmod>\n' % pageMap[i])
+        if isinstance(pageMap[i], datetime):
+            fw.write('  <lastmod>%4d-%02d-%02d</lastmod>\n' %
+                     (pageMap[i].year, pageMap[i].month, pageMap[i].day))
         if changefreq != "":
             fw.write('  <changefreq>%s</changefreq>\n' % (changefreq))
         if priority > 0.0:
@@ -318,10 +364,7 @@ def main():
                 sys.stderr.write("Priority must be between 0.0 and 1.0\n")
                 return 1
         elif opt in ("-r", "--ratelimit"):
-            if float(arg) <= 0.0:
-                ratelimit = None
-            else:
-                ratelimit = RateLimit(float(arg))
+            ratelimit = float(arg)
         elif opt in ("-o", "--output-file"):
             fileName = arg
             if fileName in ("", ".", ".."):
@@ -333,15 +376,10 @@ def main():
         sys.stderr.write("You must provide the starting URL.\nTry the -h option for help.\n")
         return 1
 
-    # Set user agent string
-    opener = urllib.request.build_opener()
-    opener.addheaders = [('User-agent', 'sitemap_gen/1.0'),
-                         ('Accept', '*/*'), ('Accept-Encoding', 'gzip')]
-    urllib.request.install_opener(opener)
-
     # Start processing
     print("Crawling the site...")
-    pageMap = parsePages(args[0], maxUrls, blockExtensions, ratelimit)
+    loader = HTMLLoad(ratelimit)
+    pageMap = parsePages(loader, args[0], maxUrls, blockExtensions)
     print("Generating sitemap: %d URLs" % (len(pageMap)))
     generateSitemapFile(pageMap, fileName, changefreq, priority)
     print("Finished.")

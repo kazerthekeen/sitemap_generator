@@ -12,7 +12,10 @@ This version is a port of his fine program to Python 3.
 ## Requirements
 
 - Python 3.x
-- reppy (<https://github.com/seomoz/reppy>, install with `pip3 install reppy`)
+- reppy (<https://github.com/seomoz/reppy>),
+  install with `pip3 install reppy`
+- requests (<https://requests.readthedocs.io/>),
+  will be installed when installing reppy.
 
 
 ## Usage
