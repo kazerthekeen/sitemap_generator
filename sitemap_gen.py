@@ -20,6 +20,7 @@
 
 import sys
 import getopt
+import re
 import string
 import time
 import urllib.parse
@@ -165,7 +166,12 @@ class HTMLLoad:
                 pass
 
         except requests.exceptions.RequestException as detail:
-            print("%s. Skipping..." % (detail))
+            msg = str(detail)
+            match = re.search(r"\(Caused by ([a-zA-Z0-9_]+)\('[^:]*: (.*)'\)",
+                              msg)
+            if match:
+                msg = "{}: {} for url: {}".format(*match.groups(), url)
+            print("%s. Skipping..." % (msg))
 
         return self.page
 #end class
