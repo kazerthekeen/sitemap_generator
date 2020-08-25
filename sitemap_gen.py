@@ -270,7 +270,6 @@ def parsePages(loader, startUrl, maxUrls, blockExtensions):
     pageMap = {}
     pageMap[startUrl] = EMPTY
     redirects = []
-
     robotParser = getRobotParser(loader, startUrl)
     server = urllib.parse.urlsplit(startUrl)[1]
 
@@ -307,11 +306,15 @@ def parsePages(loader, startUrl, maxUrls, blockExtensions):
 
 
 def generateSitemapFile(pageMap, fileName, changefreq="", priority=0.0):
+    filter_out = ["?sorting", "?redirect", "?filters", "?order", "download=true"]
     fw = open(fileName, "wt")
     fw.write('''<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n''')
     for i in sorted(pageMap.keys()):
-        fw.write('<url>\n  <loc>%s</loc>\n' % (xml.sax.saxutils.escape(i)))
+        url = xml.sax.saxutils.escape(i)
+        if any(ele in url for ele in filter_out):
+            continue
+        fw.write('<url>\n  <loc>%s</loc>\n' % (url))
         if isinstance(pageMap[i], datetime):
             fw.write('  <lastmod>%4d-%02d-%02d</lastmod>\n' %
                      (pageMap[i].year, pageMap[i].month, pageMap[i].day))
