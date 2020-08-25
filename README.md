@@ -10,8 +10,8 @@ This version is a port of his fine program to Python 3.
 
 ## Update 
 
-These are my changes to it most of the work was done by Ehler, 
-this has been forked from his repository here: https://git.b-ehlers.de/ehlers/sitemap_gen
+These are my changes to the program, most of the work was done by Ehler, 
+This is forked from his repository here: https://git.b-ehlers.de/ehlers/sitemap_gen
 All I have done currently is hardcode some link exceptions so it doesn't duplicate things based on filter parameters.
 
 
