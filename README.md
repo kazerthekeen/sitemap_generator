@@ -7,7 +7,10 @@ It has been created by Vladimir Toncar and documented in
 <http://toncar.cz/opensource/sitemap_gen.html>.
 
 This version is a port of his fine program to Python 3.
-Update these are my changes to it most of the work was done by Ehler, 
+
+## Update 
+
+These are my changes to it most of the work was done by Ehler, 
 this has been forked from his repository here: https://git.b-ehlers.de/ehlers/sitemap_gen
 All I have done currently is hardcode some link exceptions so it doesn't duplicate things based on filter parameters.
 
