@@ -303,12 +303,18 @@ def parsePages(loader, startUrl, maxUrls, blockExtensions):
 #end def
 
 
-def generateSitemapFiles(pageList, fileName, changefreq="", priority=0.0, pageCount = 0):
-    fw = open(fileName, "wt")
+def generateSitemapFiles(pageList, pageMap, fileName, changefreq="", priority=0.0, pageCount = 0):
+    cap = 500
+    if len(pageList) > cap or pageCount != 0:
+        filename =  fileName + "{}.xml".format(pageCount)
+    else:
+        filename = fileName + ".xml"
+    fw = open(filename, "wt")
     fw.write('''<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n''')
     c = 0
     while len(pageList)>0:
-        url = xml.sax.saxutils.escape(pageList.pop())
+        i = pageList.pop()
+        url = xml.sax.saxutils.escape(i)
         fw.write('<url>\n  <loc>%s</loc>\n' % (url))
         if isinstance(pageMap[i], datetime):
             fw.write('  <lastmod>%4d-%02d-%02d</lastmod>\n' %
@@ -319,14 +325,13 @@ def generateSitemapFiles(pageList, fileName, changefreq="", priority=0.0, pageCo
             fw.write('  <priority>%1.1f</priority>\n' % (priority))
         fw.write('</url>\n')
         c += 1
-        if c == 500:
+        if c == cap:
             break
     #end for
     fw.write('</urlset>\n')
     fw.close()
     if len(pageList) > 0:
-    	nextfileName = fileName+"_"+(pageCount+1)
-    	generateSitemapFiles(pageList, nextfileName, changefreq, priority, pagecount +1)
+    	generateSitemapFiles(pageList, pageMap, fileName, changefreq, priority, pageCount +1)
 #end def
 
 
@@ -344,7 +349,7 @@ def main():
     blockExtensions = ["?"]
     changefreq = ""
     priority = 0.0
-    fileName = "sitemap.xml"
+    fileName = "sitemap"
     maxUrls = 5000
     pageMap = {}
     ratelimit = None
@@ -393,7 +398,7 @@ def main():
     pageMap = parsePages(loader, args[0], maxUrls, blockExtensions)
     print("Generating sitemap: %d URLs" % (len(pageMap)))
     pageList = sorted(pageMap.keys(), reverse=True)
-    generateSitemapFiles(pageList, fileName, changefreq, priority)
+    generateSitemapFiles(pageList, pageMap, fileName, changefreq, priority)
     print("Finished.")
     return 0
 #end defhttps://github.com/kazerthekeen/sitemap_generator.git
