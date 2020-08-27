@@ -213,9 +213,7 @@ class MyHTMLParser(HTMLParser):
     #end def
 
     def hasBlockedExtension(self, url):
-        p = urllib.parse.urlparse(url)
-        path = p[2].upper() # path attribute
-        return path.endswith(self.blockExtensions)
+        return any(ele in url for ele in self.blockExtensions)
     #end def
 
     def handle_starttag(self, tag, attrs):
@@ -305,15 +303,12 @@ def parsePages(loader, startUrl, maxUrls, blockExtensions):
 #end def
 
 
-def generateSitemapFile(pageMap, fileName, changefreq="", priority=0.0):
-    filter_out = ["?sorting", "?redirect", "?filters", "?order", "download=true"]
+def generateSitemapFiles(pageList, fileName, changefreq="", priority=0.0, pageCount = 0):
     fw = open(fileName, "wt")
-    fw.write('''<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n''')
-    for i in sorted(pageMap.keys()):
-        url = xml.sax.saxutils.escape(i)
-        if any(ele in url for ele in filter_out):
-            continue
+    fw.write('''<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n''')
+    c = 0
+    while len(pageList)>0:
+        url = xml.sax.saxutils.escape(pageList.pop())
         fw.write('<url>\n  <loc>%s</loc>\n' % (url))
         if isinstance(pageMap[i], datetime):
             fw.write('  <lastmod>%4d-%02d-%02d</lastmod>\n' %
@@ -323,9 +318,15 @@ def generateSitemapFile(pageMap, fileName, changefreq="", priority=0.0):
         if priority > 0.0:
             fw.write('  <priority>%1.1f</priority>\n' % (priority))
         fw.write('</url>\n')
+        c += 1
+        if c == 500:
+            break
     #end for
     fw.write('</urlset>\n')
     fw.close()
+    if len(pageList) > 0:
+    	nextfileName = fileName+"_"+(pageCount+1)
+    	generateSitemapFiles(pageList, nextfileName, changefreq, priority, pagecount +1)
 #end def
 
 
@@ -340,11 +341,11 @@ def main():
         sys.stderr.write(helpText)
         return 1
 
-    blockExtensions = []
+    blockExtensions = ["?"]
     changefreq = ""
     priority = 0.0
     fileName = "sitemap.xml"
-    maxUrls = 1000
+    maxUrls = 5000
     pageMap = {}
     ratelimit = None
 
@@ -353,7 +354,8 @@ def main():
             sys.stderr.write(helpText)
             return 1
         elif opt in ("-b", "--block"):
-            blockExtensions.append("." + arg.upper())
+            print(arg)
+            blockExtensions.append(arg)
         elif opt in ("-c", "--changefreq"):
             if arg in allowedChangefreq:
                 changefreq = arg
@@ -390,10 +392,11 @@ def main():
     loader = HTMLLoad(ratelimit)
     pageMap = parsePages(loader, args[0], maxUrls, blockExtensions)
     print("Generating sitemap: %d URLs" % (len(pageMap)))
-    generateSitemapFile(pageMap, fileName, changefreq, priority)
+    pageList = sorted(pageMap.keys(), reverse=True)
+    generateSitemapFiles(pageList, fileName, changefreq, priority)
     print("Finished.")
     return 0
-#end def
+#end defhttps://github.com/kazerthekeen/sitemap_generator.git
 
 if __name__ == '__main__':
     try:

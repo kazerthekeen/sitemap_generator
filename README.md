@@ -8,11 +8,12 @@ It has been created by Vladimir Toncar and documented in
 
 This version is a port of his fine program to Python 3.
 
-## Update 
+## Update
 
-These are my changes to the program, most of the work was done by Ehler, 
+These are my changes to the program, most of the work was done by Ehler,
 This is forked from his repository here: https://git.b-ehlers.de/ehlers/sitemap_gen
-All I have done currently is hardcode some link exceptions so it doesn't duplicate things based on filter parameters.
+All I have done so far is minor changes to how blocking works to expand it for
+query strings. There might be a better approach but it works.
 
 
 ## Requirements
@@ -38,12 +39,10 @@ python3 sitemap_gen.py <options> <starting URL>
 Available options:
 -h         --help                Print this text and exit
 
--b <ext>   --block <ext>         Exclude URLs with the given extension;
-                                 <ext> must be without the leading dot.
-                                 The comparison is case insensitive, so
-                                 for example DOC and doc are treated
-                                 the same. You can use this option several
-                                 times to block several extensions.
+-b <ext>   --block <ext>         Exclude URLs with the matching text in them.
+                                 Good for filtering out query strings like
+                                 "?sort" to eliminate sorted urls. Alternatively
+                                 add ? to disable all query strings
 
 -c <value> --changefreq <value>  Set the change frequency. The given value
                                  is used in all sitemap entries (maybe a
