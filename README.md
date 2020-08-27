@@ -13,7 +13,8 @@ This version is a port of his fine program to Python 3.
 These are my changes to the program, most of the work was done by Ehler,
 This is forked from his repository here: https://git.b-ehlers.de/ehlers/sitemap_gen
 All I have done so far is minor changes to how blocking works to expand it for
-query strings. There might be a better approach but it works.
+query strings. There might be a better approach but it works. 
+File output is now segmented into files with 500 links each. Uses filename_# for pages  after the first
 
 
 ## Requirements
